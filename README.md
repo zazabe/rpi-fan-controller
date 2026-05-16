@@ -15,9 +15,10 @@ This project targets 4-wire PWM fans such as the Noctua NF-A4x10 5V PWM.
 
 At startup, the app loads config from:
 
-1. `/etc/rpi-fan-control/config.toml`
-2. `./config.toml`
-3. built-in defaults
+1. `--config <path>` when provided on the command line
+2. `/etc/rpi-fan-control/config.toml`
+3. `./config.toml`
+4. built-in defaults
 
 Reference example: `packaging/config.toml.example`.
 
@@ -41,6 +42,12 @@ The controller derives detailed curve/smoothing internals from this simple confi
 
 ```bash
 cargo run
+```
+
+Run with a custom config file:
+
+```bash
+cargo run -- --config ./config.toml
 ```
 
 Enable debug telemetry:

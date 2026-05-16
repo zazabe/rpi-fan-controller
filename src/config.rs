@@ -70,14 +70,19 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
-    pub fn load() -> Result<(Self, PathBuf), Box<dyn std::error::Error + Send + Sync>> {
+    pub fn load(
+        config_override: Option<&Path>,
+    ) -> Result<(Self, PathBuf), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(path) = config_override {
+            let cfg = Self::load_from_path(path)?;
+            return Ok((cfg, path.to_path_buf()));
+        }
+
         let candidates = [Path::new(SYSTEM_CONFIG_PATH), Path::new(LOCAL_CONFIG_PATH)];
 
         for path in candidates {
             if path.exists() {
-                let raw = fs::read_to_string(path)?;
-                let cfg = toml::from_str::<Self>(&raw)?;
-                cfg.validate()?;
+                let cfg = Self::load_from_path(path)?;
                 return Ok((cfg, path.to_path_buf()));
             }
         }
@@ -85,6 +90,13 @@ impl AppConfig {
         let cfg = Self::default();
         cfg.validate()?;
         Ok((cfg, PathBuf::from("<built-in defaults>")))
+    }
+
+    fn load_from_path(path: &Path) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let raw = fs::read_to_string(path)?;
+        let cfg = toml::from_str::<Self>(&raw)?;
+        cfg.validate()?;
+        Ok(cfg)
     }
 
     pub fn validate(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

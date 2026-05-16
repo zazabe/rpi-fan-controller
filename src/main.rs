@@ -4,13 +4,16 @@ use rpi_fan_control::control::{process_tick, should_update_target, ControllerSta
 use rpi_fan_control::hardware::{
     read_cpu_temp_millideg, read_fan_speed_rpm, DryRunPwmBackend, PwmBackend, TachRpmReader,
 };
+use std::ffi::OsString;
+use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let (cfg, cfg_path) = AppConfig::load()?;
+    let config_override = parse_config_arg()?;
+    let (cfg, cfg_path) = AppConfig::load(config_override.as_deref())?;
     info!(
         "rpi-fan-control start config_source={} pin={} thermal_path={} fan_speed_path={} tach_gpio_pin={} loop_ms={} status_interval_s={} target_temp_c={} min_duty={} max_duty={} response={:?} dry_run={}",
         cfg_path.display(),
@@ -106,6 +109,43 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             thread::sleep(tick_sleep - elapsed);
         }
     }
+}
+
+fn parse_config_arg() -> Result<Option<PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut args = std::env::args_os();
+    let _bin = args.next();
+    let mut config_path: Option<PathBuf> = None;
+
+    while let Some(arg) = args.next() {
+        if arg == "--config" {
+            let next = args.next().ok_or("--config requires a file path value")?;
+            if config_path.replace(PathBuf::from(next)).is_some() {
+                return Err("--config may only be provided once".into());
+            }
+            continue;
+        }
+
+        if let Some(value) = parse_inline_config_value(&arg) {
+            if value.is_empty() {
+                return Err("--config= requires a file path value".into());
+            }
+            if config_path.replace(PathBuf::from(value)).is_some() {
+                return Err("--config may only be provided once".into());
+            }
+            continue;
+        }
+
+        return Err(format!("unknown argument: {}", arg.to_string_lossy()).into());
+    }
+
+    Ok(config_path)
+}
+
+fn parse_inline_config_value(arg: &OsString) -> Option<String> {
+    let value = arg.to_string_lossy();
+    value
+        .strip_prefix("--config=")
+        .map(std::string::ToString::to_string)
 }
 
 fn build_backend(
