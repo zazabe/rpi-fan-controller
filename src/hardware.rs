@@ -52,3 +52,9 @@ pub fn read_cpu_temp_millideg(
     let parsed = raw.trim().parse::<i32>()?;
     Ok(parsed)
 }
+
+pub fn read_fan_speed_rpm(path: &str) -> Result<u32, Box<dyn std::error::Error + Send + Sync>> {
+    let raw = fs::read_to_string(path)?;
+    let parsed = raw.trim().parse::<u32>()?;
+    Ok(parsed)
+}

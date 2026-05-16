@@ -1,7 +1,10 @@
 dry_run = false
 gpio_pin = 18
 thermal_path = "/sys/class/thermal/thermal_zone0/temp"
+# Optional tachometer sysfs path, e.g. /sys/class/hwmon/hwmon0/fan1_input
+# fan_speed_path = "/sys/class/hwmon/hwmon0/fan1_input"
 loop_interval_ms = 1000
+status_interval_secs = 60
 target_temp_c = 62
 min_duty = 25
 max_duty = 100

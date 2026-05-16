@@ -25,7 +25,9 @@ Important keys:
 
 - `gpio_pin`: BCM pin number used for PWM output.
 - `thermal_path`: Linux sysfs temperature source path.
+- `fan_speed_path`: optional Linux sysfs tach path for RPM status logging.
 - `loop_interval_ms`: control loop period (default `1000`).
+- `status_interval_secs`: interval for `info` status logs in `journalctl` (default `60`).
 - `target_temp_c`: desired cooling target used to derive the fan curve.
 - `min_duty`: minimum duty used once fan turns on.
 - `max_duty`: maximum duty cap.

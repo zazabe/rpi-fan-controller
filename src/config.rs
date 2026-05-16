@@ -11,7 +11,9 @@ pub struct AppConfig {
     pub dry_run: bool,
     pub gpio_pin: u8,
     pub thermal_path: String,
+    pub fan_speed_path: Option<String>,
     pub loop_interval_ms: u64,
+    pub status_interval_secs: u64,
     pub target_temp_c: i32,
     pub min_duty: u8,
     pub max_duty: u8,
@@ -54,7 +56,9 @@ impl Default for AppConfig {
             dry_run: false,
             gpio_pin: 18,
             thermal_path: "/sys/class/thermal/thermal_zone0/temp".to_string(),
+            fan_speed_path: None,
             loop_interval_ms: 1_000,
+            status_interval_secs: 60,
             target_temp_c: 62,
             min_duty: 25,
             max_duty: 100,
@@ -85,8 +89,16 @@ impl AppConfig {
         if self.loop_interval_ms == 0 {
             return Err("loop_interval_ms must be > 0".into());
         }
+        if self.status_interval_secs == 0 {
+            return Err("status_interval_secs must be > 0".into());
+        }
         if self.thermal_path.trim().is_empty() {
             return Err("thermal_path must not be empty".into());
+        }
+        if let Some(path) = &self.fan_speed_path {
+            if path.trim().is_empty() {
+                return Err("fan_speed_path must not be empty when provided".into());
+            }
         }
         if !(35..=85).contains(&self.target_temp_c) {
             return Err("target_temp_c must be in range 35..=85".into());

@@ -1,7 +1,9 @@
 use log::{debug, error, info, warn};
 use rpi_fan_control::config::AppConfig;
 use rpi_fan_control::control::{process_tick, should_update_target, ControllerState, TickResult};
-use rpi_fan_control::hardware::{read_cpu_temp_millideg, DryRunPwmBackend, PwmBackend};
+use rpi_fan_control::hardware::{
+    read_cpu_temp_millideg, read_fan_speed_rpm, DryRunPwmBackend, PwmBackend,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -10,11 +12,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let (cfg, cfg_path) = AppConfig::load()?;
     info!(
-        "rpi-fan-control start config_source={} pin={} thermal_path={} loop_ms={} target_temp_c={} min_duty={} max_duty={} response={:?} dry_run={}",
+        "rpi-fan-control start config_source={} pin={} thermal_path={} fan_speed_path={} loop_ms={} status_interval_s={} target_temp_c={} min_duty={} max_duty={} response={:?} dry_run={}",
         cfg_path.display(),
         cfg.gpio_pin,
         cfg.thermal_path,
+        cfg.fan_speed_path.as_deref().unwrap_or("<disabled>"),
         cfg.loop_interval_ms,
+        cfg.status_interval_secs,
         cfg.target_temp_c,
         cfg.min_duty,
         cfg.max_duty,
@@ -26,6 +30,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut state = ControllerState::new();
     let mut tick: u64 = 0;
     let tick_sleep = Duration::from_millis(cfg.loop_interval_ms);
+    let status_interval = Duration::from_secs(cfg.status_interval_secs);
+    let mut next_status_at = Instant::now() + status_interval;
 
     loop {
         let start = Instant::now();
@@ -61,6 +67,27 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
 
         tick = tick.saturating_add(1);
+        if start >= next_status_at {
+            let temp_c = f64::from(temp_millideg) / 1_000.0;
+            let fan_speed = match cfg.fan_speed_path.as_deref() {
+                Some(path) => match read_fan_speed_rpm(path) {
+                    Ok(rpm) => format!("{rpm} RPM"),
+                    Err(err) => format!("unavailable ({err})"),
+                },
+                None => "disabled".to_string(),
+            };
+
+            info!(
+                "status: CPU {temp_c:.1} C, fan {fan_speed}, duty {}% (target {}%), pwm write {}",
+                result.smoothed_duty,
+                result.target_duty,
+                if result.should_write { "yes" } else { "no" },
+            );
+            while next_status_at <= start {
+                next_status_at += status_interval;
+            }
+        }
+
         if tick.is_multiple_of(cfg.telemetry_interval_ticks()) {
             debug!(
                 "telemetry tick={} temp_mc={} target={} duty={}",
