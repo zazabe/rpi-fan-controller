@@ -1,6 +1,6 @@
 use log::{debug, error, info, warn};
 use rpi_fan_control::config::AppConfig;
-use rpi_fan_control::control::{process_tick, should_update_target, ControllerState, TickResult};
+use rpi_fan_control::control::{process_tick, ControllerState};
 use rpi_fan_control::hardware::{
     read_cpu_temp_millideg, read_fan_speed_rpm, DryRunPwmBackend, PwmBackend, TachRpmReader,
 };
@@ -52,15 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         };
 
-        let result = if should_update_target(temp_millideg, &cfg, &state) {
-            process_tick(temp_millideg, &cfg, &mut state)
-        } else {
-            TickResult {
-                target_duty: state.current_duty(),
-                smoothed_duty: state.current_duty(),
-                should_write: false,
-            }
-        };
+        let result = process_tick(temp_millideg, &cfg, &mut state);
 
         if result.should_write {
             if let Err(err) = pwm.set_duty_percent(result.smoothed_duty) {
