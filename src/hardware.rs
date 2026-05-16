@@ -1,3 +1,5 @@
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+use rppal::pwm::{Channel, Polarity, Pwm};
 use std::fs;
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 use std::thread;
@@ -26,16 +28,17 @@ impl PwmBackend for DryRunPwmBackend {
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 pub struct RpiGpioPwmBackend {
-    pin: rppal::gpio::OutputPin,
+    pwm: Pwm,
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl RpiGpioPwmBackend {
     pub fn new(gpio_pin: u8) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        use rppal::gpio::Gpio;
-        let gpio = Gpio::new()?;
-        let pin = gpio.get(gpio_pin)?.into_output();
-        Ok(Self { pin })
+        // GPIO software PWM at 25 kHz can consume an entire CPU core.
+        // Use hardware PWM channels to keep service overhead low.
+        let channel = gpio_pin_to_pwm_channel(gpio_pin)?;
+        let pwm = Pwm::with_frequency(channel, 25_000.0, 0.0, Polarity::Normal, true)?;
+        Ok(Self { pwm })
     }
 }
 
@@ -45,9 +48,23 @@ impl PwmBackend for RpiGpioPwmBackend {
         &mut self,
         duty_percent: u8,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.pin
-            .set_pwm_frequency(25_000.0, f64::from(duty_percent) / 100.0)?;
+        self.pwm.set_duty_cycle(f64::from(duty_percent) / 100.0)?;
         Ok(())
+    }
+}
+
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+fn gpio_pin_to_pwm_channel(
+    gpio_pin: u8,
+) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>> {
+    match gpio_pin {
+        12 | 18 => Ok(Channel::Pwm0),
+        13 | 19 => Ok(Channel::Pwm1),
+        _ => Err(format!(
+            "GPIO {} does not support hardware PWM (use BCM 12/18 for PWM0 or BCM 13/19 for PWM1)",
+            gpio_pin
+        )
+        .into()),
     }
 }
 

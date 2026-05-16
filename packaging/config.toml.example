@@ -1,4 +1,5 @@
 dry_run = false
+# Hardware PWM pin (BCM 12/18 => PWM0, BCM 13/19 => PWM1)
 gpio_pin = 18
 thermal_path = "/sys/class/thermal/thermal_zone0/temp"
 # Optional tachometer sysfs path, e.g. /sys/class/hwmon/hwmon0/fan1_input

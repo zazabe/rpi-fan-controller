@@ -26,7 +26,7 @@ Reference example: `packaging/config.toml.example`.
 
 Important keys:
 
-- `gpio_pin`: BCM pin number used for PWM output.
+- `gpio_pin`: BCM pin used for hardware PWM output (`12`/`18` for PWM0, `13`/`19` for PWM1).
 - `thermal_path`: Linux sysfs temperature source path.
 - `fan_speed_path`: optional Linux sysfs tach path for RPM status logging (first choice).
 - `tach_gpio_pin`: optional BCM GPIO input for tach RPM fallback (uses internal pull-up).
