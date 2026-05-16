@@ -1,0 +1,8 @@
+dry_run = false
+gpio_pin = 18
+thermal_path = "/sys/class/thermal/thermal_zone0/temp"
+loop_interval_ms = 1000
+target_temp_c = 62
+min_duty = 25
+max_duty = 100
+response = "balanced"

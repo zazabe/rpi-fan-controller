@@ -1,0 +1,21 @@
+{
+  "name": "rpi-fan-control",
+  "image": "mcr.microsoft.com/devcontainers/rust:1",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "postCreateCommand": "rustup component add rustfmt clippy && rustup target add aarch64-unknown-linux-gnu",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tamasfe.even-better-toml",
+        "DavidAnson.vscode-markdownlint",
+        "augustocdias.tasks-shell-input"
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy"
+      }
+    }
+  }
+}

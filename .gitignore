@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+.env
+.DS_Store
+config.toml
+dist/
+*.tar.gz

@@ -1,0 +1,16 @@
+[package]
+name = "rpi-fan-control"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Low-overhead Raspberry Pi 4 PWM fan controller"
+repository = "https://github.com/example/rpi-fan-control"
+
+[dependencies]
+log = "0.4"
+env_logger = { version = "0.11", default-features = false, features = ["auto-color"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+
+[target.'cfg(any(target_arch = "arm", target_arch = "aarch64"))'.dependencies]
+rppal = "0.17"

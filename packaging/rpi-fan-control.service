@@ -1,0 +1,16 @@
+[Unit]
+Description=Raspberry Pi fan controller
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/rpi-fan-control
+Restart=on-failure
+RestartSec=3
+EnvironmentFile=-/etc/default/rpi-fan-control
+WorkingDirectory=/etc/rpi-fan-control
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
