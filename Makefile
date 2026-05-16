@@ -21,7 +21,7 @@ release-tag:
 	fi
 	@python3 scripts/bump_cargo_version.py "$(VERSION)"
 	@cargo test
-	@git add Cargo.toml
+	@git add Cargo.toml Cargo.lock
 	@git commit -m "release: bump version to v$(VERSION)"
 	@git tag "v$(VERSION)"
 	@echo "Created commit and tag v$(VERSION)."
