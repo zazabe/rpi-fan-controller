@@ -54,6 +54,20 @@ cargo run --release --bin control_bench
 
 ## Install on Raspberry Pi (systemd)
 
+Quick install from GitHub Releases:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zazabe/rpi-fan-controller/main/install.sh | sudo bash
+```
+
+Install a specific release tag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zazabe/rpi-fan-controller/main/install.sh | sudo bash -s -- v0.1.1
+```
+
+Manual install:
+
 ```bash
 sudo install -D -m 0755 target/release/rpi-fan-control /usr/local/bin/rpi-fan-control
 sudo install -D -m 0644 packaging/rpi-fan-control.service /etc/systemd/system/rpi-fan-control.service
@@ -97,6 +111,11 @@ To bump a release, create and push a new semantic tag:
 git tag v0.1.1
 git push origin v0.1.1
 ```
+
+Pick the release asset that matches your Pi OS architecture:
+
+- `*aarch64-unknown-linux-gnu.tar.gz` for 64-bit OS (`uname -m` shows `aarch64`).
+- `*armv7-unknown-linux-gnueabihf.tar.gz` for 32-bit OS (`uname -m` shows `armv7l` or similar).
 
 ## License
 
