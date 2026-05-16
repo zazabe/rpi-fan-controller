@@ -37,7 +37,14 @@ impl RpiGpioPwmBackend {
         // GPIO software PWM at 25 kHz can consume an entire CPU core.
         // Use hardware PWM channels to keep service overhead low.
         let channel = gpio_pin_to_pwm_channel(gpio_pin)?;
-        let pwm = Pwm::with_frequency(channel, 25_000.0, 0.0, Polarity::Normal, true)?;
+        let pwm = Pwm::with_frequency(channel, 25_000.0, 0.0, Polarity::Normal, true).map_err(
+            |err| {
+                format!(
+                    "failed to init hardware PWM on BCM {} ({}) - ensure PWM is enabled in boot config (e.g. dtoverlay=pwm-2chan) and reboot",
+                    gpio_pin, err
+                )
+            },
+        )?;
         Ok(Self { pwm })
     }
 }

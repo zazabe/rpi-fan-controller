@@ -12,6 +12,7 @@ This project targets 4-wire PWM fans such as the Noctua NF-A4x10 5V PWM.
 - Drive the fan PWM input using open-drain/transistor style wiring from the selected GPIO pin.
 - Fan tach wiring is optional. RPM logging can use `hwmon` or a direct tach GPIO input.
 - Verify common ground between Raspberry Pi and fan power source.
+- For hardware PWM, enable PWM overlay in boot config (for example `dtoverlay=pwm-2chan`) and reboot.
 
 ## Configuration
 
