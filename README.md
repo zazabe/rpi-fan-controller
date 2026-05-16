@@ -125,6 +125,7 @@ journalctl -u rpi-fan-control -f
 - CI workflow (`.github/workflows/ci.yml`) runs fmt, clippy, tests, and benchmark smoke.
 - Release workflow (`.github/workflows/release.yml`) publishes ARM tarballs for tags matching `v*.*.*`.
 - Recommended convention: semantic tags like `v0.1.0`.
+- Release tags must match `Cargo.toml` version (e.g. `version = "0.1.2"` -> tag `v0.1.2`).
 - Release notes template: `.github/release_template.md`.
 
 To bump a release, create and push a new semantic tag:
@@ -132,6 +133,13 @@ To bump a release, create and push a new semantic tag:
 ```bash
 git tag v0.1.1
 git push origin v0.1.1
+```
+
+Or use the helper command to update `Cargo.toml`, commit, and create a matching tag:
+
+```bash
+make release-tag VERSION=0.1.1
+git push && git push --tags
 ```
 
 Pick the release asset that matches your Pi OS architecture:

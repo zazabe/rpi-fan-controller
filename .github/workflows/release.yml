@@ -16,6 +16,24 @@ jobs:
         target: [aarch64-unknown-linux-gnu, armv7-unknown-linux-gnueabihf]
     steps:
       - uses: actions/checkout@v4
+      - name: Validate tag matches Cargo.toml version
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+
+          with open("Cargo.toml", "rb") as f:
+              cargo_version = tomllib.load(f)["package"]["version"]
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          expected_tag = f"v{cargo_version}"
+          if tag != expected_tag:
+              raise SystemExit(
+                  f"Tag/version mismatch: got tag {tag}, expected {expected_tag} from Cargo.toml"
+              )
+
+          print(f"Tag/version match OK: {tag}")
+          PY
       - uses: dtolnay/rust-toolchain@stable
       - uses: taiki-e/install-action@cross
       - uses: Swatinem/rust-cache@v2

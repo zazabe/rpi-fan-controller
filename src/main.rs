@@ -14,6 +14,7 @@ const DEFAULT_DISCOVERY_PINS: [u8; 12] = [17, 22, 23, 24, 25, 27, 5, 6, 16, 20, 
 #[derive(Debug, Parser)]
 #[command(name = "rpi-fan-control")]
 #[command(about = "Low-overhead Raspberry Pi PWM fan controller")]
+#[command(version)]
 struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     config: Option<PathBuf>,
