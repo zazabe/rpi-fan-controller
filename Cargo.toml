@@ -7,6 +7,7 @@ description = "Low-overhead Raspberry Pi 4 PWM fan controller"
 repository = "https://github.com/example/rpi-fan-control"
 
 [dependencies]
+clap = { version = "4", features = ["derive"] }
 log = "0.4"
 env_logger = { version = "0.11", default-features = false, features = ["auto-color"] }
 serde = { version = "1.0", features = ["derive"] }

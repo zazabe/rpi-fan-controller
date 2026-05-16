@@ -1,19 +1,60 @@
+use clap::{Parser, Subcommand};
 use log::{debug, error, info, warn};
 use rpi_fan_control::config::AppConfig;
 use rpi_fan_control::control::{process_tick, ControllerState};
 use rpi_fan_control::hardware::{
     read_cpu_temp_millideg, read_fan_speed_rpm, DryRunPwmBackend, PwmBackend, TachRpmReader,
 };
-use std::ffi::OsString;
 use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
 
+const DEFAULT_DISCOVERY_PINS: [u8; 12] = [17, 22, 23, 24, 25, 27, 5, 6, 16, 20, 21, 26];
+
+#[derive(Debug, Parser)]
+#[command(name = "rpi-fan-control")]
+#[command(about = "Low-overhead Raspberry Pi PWM fan controller")]
+struct Cli {
+    #[arg(long, global = true, value_name = "FILE")]
+    config: Option<PathBuf>,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    Run,
+    DiscoverTach {
+        #[arg(long = "pin", value_name = "BCM_PIN", value_delimiter = ',')]
+        pins: Vec<u8>,
+        #[arg(long, default_value_t = 100)]
+        duty: u8,
+        #[arg(long, default_value_t = 4)]
+        samples: u8,
+    },
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    let config_override = parse_config_arg()?;
-    let (cfg, cfg_path) = AppConfig::load(config_override.as_deref())?;
+    let cli = Cli::parse();
+    let (cfg, cfg_path) = AppConfig::load(cli.config.as_deref())?;
+
+    match cli.command {
+        None | Some(Command::Run) => run_controller(cfg, cfg_path),
+        Some(Command::DiscoverTach {
+            pins,
+            duty,
+            samples,
+        }) => discover_tach(cfg, cfg_path, pins, duty, samples),
+    }
+}
+
+fn run_controller(
+    cfg: AppConfig,
+    cfg_path: PathBuf,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!(
         "rpi-fan-control start config_source={} pin={} thermal_path={} fan_speed_path={} tach_gpio_pin={} loop_ms={} status_interval_s={} target_temp_c={} min_duty={} max_duty={} response={:?} dry_run={}",
         cfg_path.display(),
@@ -103,43 +144,6 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
 }
 
-fn parse_config_arg() -> Result<Option<PathBuf>, Box<dyn std::error::Error + Send + Sync>> {
-    let mut args = std::env::args_os();
-    let _bin = args.next();
-    let mut config_path: Option<PathBuf> = None;
-
-    while let Some(arg) = args.next() {
-        if arg == "--config" {
-            let next = args.next().ok_or("--config requires a file path value")?;
-            if config_path.replace(PathBuf::from(next)).is_some() {
-                return Err("--config may only be provided once".into());
-            }
-            continue;
-        }
-
-        if let Some(value) = parse_inline_config_value(&arg) {
-            if value.is_empty() {
-                return Err("--config= requires a file path value".into());
-            }
-            if config_path.replace(PathBuf::from(value)).is_some() {
-                return Err("--config may only be provided once".into());
-            }
-            continue;
-        }
-
-        return Err(format!("unknown argument: {}", arg.to_string_lossy()).into());
-    }
-
-    Ok(config_path)
-}
-
-fn parse_inline_config_value(arg: &OsString) -> Option<String> {
-    let value = arg.to_string_lossy();
-    value
-        .strip_prefix("--config=")
-        .map(std::string::ToString::to_string)
-}
-
 fn build_backend(
     cfg: &AppConfig,
 ) -> Result<Box<dyn PwmBackend>, Box<dyn std::error::Error + Send + Sync>> {
@@ -159,6 +163,104 @@ fn build_backend(
         warn!("non-rpi architecture detected; forcing dry-run backend");
         Ok(Box::new(DryRunPwmBackend))
     }
+}
+
+fn discover_tach(
+    cfg: AppConfig,
+    cfg_path: PathBuf,
+    pins: Vec<u8>,
+    duty: u8,
+    samples: u8,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let sample_count = samples.max(1);
+    let clamped_duty = duty.clamp(cfg.min_duty, 100);
+    let mut candidates = if pins.is_empty() {
+        DEFAULT_DISCOVERY_PINS.to_vec()
+    } else {
+        pins
+    };
+    candidates.sort_unstable();
+    candidates.dedup();
+
+    info!(
+        "tach discovery start config_source={} candidates={:?} duty={} samples={}",
+        cfg_path.display(),
+        candidates,
+        clamped_duty,
+        sample_count
+    );
+
+    let mut pwm = build_backend(&cfg)?;
+    if let Err(err) = pwm.set_duty_percent(clamped_duty) {
+        warn!(
+            "unable to set duty to {}% for tach discovery ({})",
+            clamped_duty, err
+        );
+    } else {
+        info!(
+            "set duty to {}% for tach discovery, waiting for fan to stabilize",
+            clamped_duty
+        );
+        thread::sleep(Duration::from_millis(800));
+    }
+
+    let mut results: Vec<(u8, u32)> = Vec::new();
+    for pin in candidates {
+        if pin == cfg.gpio_pin {
+            warn!("skip BCM {} because it is used for PWM output", pin);
+            continue;
+        }
+
+        let mut reader = match TachRpmReader::new(pin) {
+            Ok(reader) => reader,
+            Err(err) => {
+                warn!("skip BCM {} ({})", pin, err);
+                continue;
+            }
+        };
+
+        let mut values: Vec<u32> = Vec::with_capacity(usize::from(sample_count));
+        for _ in 0..sample_count {
+            match reader.read_rpm() {
+                Ok(rpm) => values.push(rpm),
+                Err(err) => {
+                    warn!("BCM {} tach read failed ({})", pin, err);
+                    values.clear();
+                    break;
+                }
+            }
+        }
+
+        if values.is_empty() {
+            continue;
+        }
+
+        let avg_rpm = values.iter().copied().sum::<u32>() / values.len() as u32;
+        if avg_rpm > 0 {
+            info!(
+                "BCM {} candidate RPM samples={:?} avg={}",
+                pin, values, avg_rpm
+            );
+            results.push((pin, avg_rpm));
+        } else {
+            info!("BCM {} no tach pulses detected", pin);
+        }
+    }
+
+    results.sort_by(|a, b| b.1.cmp(&a.1));
+    if let Some((best_pin, best_rpm)) = results.first().copied() {
+        info!(
+            "tach discovery best pin: BCM {} (~{} RPM), add `tach_gpio_pin = {}`",
+            best_pin, best_rpm, best_pin
+        );
+        for (pin, rpm) in results {
+            info!("tach discovery result: BCM {} => ~{} RPM", pin, rpm);
+        }
+    } else {
+        warn!("tach discovery found no RPM signal. Check wiring, common ground, and pull-up.");
+    }
+
+    Ok(())
 }
 
 fn build_tach_reader(cfg: &AppConfig) -> Option<TachRpmReader> {

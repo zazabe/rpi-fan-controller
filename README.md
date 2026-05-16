@@ -47,7 +47,19 @@ cargo run
 Run with a custom config file:
 
 ```bash
-cargo run -- --config ./config.toml
+cargo run -- --config ./config.toml run
+```
+
+Tach auto-discovery (probe candidate GPIO pins and report RPM):
+
+```bash
+cargo run -- --config ./config.toml discover-tach
+```
+
+Show CLI version:
+
+```bash
+cargo run -- --version
 ```
 
 Enable debug telemetry:
