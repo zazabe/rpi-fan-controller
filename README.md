@@ -2,6 +2,8 @@
 
 Low-overhead Raspberry Pi fan controller written in Rust. It reads CPU temperature from thermal sysfs and drives a PWM signal with an asymmetric control curve (faster ramp-up, slower ramp-down).
 
+> **Tested on:** Raspberry Pi 4 Model B Rev 1.5 (`aarch64`), Debian 13 (Trixie), kernel `6.18.29+rpt-rpi-v8`, with Noctua [NF-A4x10 5V PWM](https://www.noctua.at/en/products/nf-a4x10-5v-pwm); validated via both manual run and `systemd` service mode.
+
 ## Hardware Notes
 
 This project targets 4-wire PWM fans such as the Noctua NF-A4x10 5V PWM.
