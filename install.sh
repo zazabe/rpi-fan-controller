@@ -25,55 +25,52 @@ esac
 
 ASSET="rpi-fan-control-${TARGET}.tar.gz"
 
-resolve_download_url() {
+resolve_release_tag() {
   local version="$1"
-  local api_url
-
-  if [[ "${version}" == "latest" ]]; then
-    api_url="https://api.github.com/repos/${REPO}/releases/latest"
-  else
-    api_url="https://api.github.com/repos/${REPO}/releases/tags/${version}"
+  if [[ "${version}" != "latest" ]]; then
+    printf '%s\n' "${version}"
+    return 0
   fi
 
-  local json
-  if ! json="$(curl -fsSL -H "Accept: application/vnd.github+json" "${api_url}")"; then
-    echo "Failed to query GitHub release metadata: ${api_url}" >&2
+  local json tag
+  if ! json="$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${REPO}/releases/latest")"; then
+    echo "Failed to query latest release metadata from GitHub" >&2
     return 1
   fi
-
-  # Prefer exact current asset name, but also accept historical names that end
-  # with "-${TARGET}.tar.gz" (for example with version in the filename).
-  local url
-  url="$(
-    printf '%s\n' "${json}" \
-      | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)".*/\1/p' \
-      | awk -v exact="${ASSET}" -v suffix="-${TARGET}.tar.gz" '
-          {
-            if ($0 ~ ("/" exact "$")) exact_match = $0
-            if ($0 ~ (suffix "$")) suffix_match = $0
-          }
-          END {
-            if (exact_match != "") print exact_match
-            else if (suffix_match != "") print suffix_match
-          }
-        '
-  )"
-
-  if [[ -z "${url}" ]]; then
-    echo "No release asset found for ${TARGET} in ${version}" >&2
+  tag="$(printf '%s\n' "${json}" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+  if [[ -z "${tag}" ]]; then
+    echo "Could not determine latest release tag" >&2
     return 1
   fi
-
-  printf '%s\n' "${url}"
+  printf '%s\n' "${tag}"
 }
 
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "${TMP_DIR}"; }
 trap cleanup EXIT
 
-URL="$(resolve_download_url "${VERSION}")"
-echo "Downloading ${URL}"
-curl -fL "${URL}" -o "${TMP_DIR}/release.tar.gz"
+TAG="$(resolve_release_tag "${VERSION}")"
+BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+CANDIDATES=(
+  "${BASE_URL}/rpi-fan-control-${TARGET}.tar.gz"
+  "${BASE_URL}/rpi-fan-control-${TAG}-${TARGET}.tar.gz"
+)
+
+URL=""
+for candidate in "${CANDIDATES[@]}"; do
+  echo "Trying ${candidate}"
+  if curl -fL "${candidate}" -o "${TMP_DIR}/release.tar.gz"; then
+    URL="${candidate}"
+    break
+  fi
+done
+
+if [[ -z "${URL}" ]]; then
+  echo "Could not download a release asset for ${TARGET} from tag ${TAG}" >&2
+  exit 1
+fi
+
+echo "Downloaded ${URL}"
 tar -xzf "${TMP_DIR}/release.tar.gz" -C "${TMP_DIR}"
 
 PKG_DIR="${TMP_DIR}/rpi-fan-control-${TARGET}"
