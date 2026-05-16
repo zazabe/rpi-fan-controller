@@ -32,14 +32,17 @@ resolve_release_tag() {
     return 0
   fi
 
-  local json tag
-  if ! json="$(curl -fsSL -H "Accept: application/vnd.github+json" "https://api.github.com/repos/${REPO}/releases/latest")"; then
-    echo "Failed to query latest release metadata from GitHub" >&2
+  # Resolve the real latest tag from GitHub's redirect chain, then use that tag
+  # for asset filenames (some releases include the tag in the tarball name).
+  local latest_url tag
+  if ! latest_url="$(curl -fsSL -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest")"; then
+    echo "Failed to resolve latest release redirect from GitHub" >&2
     return 1
   fi
-  tag="$(printf '%s\n' "${json}" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+
+  tag="$(printf '%s\n' "${latest_url}" | sed -n 's#^https://github.com/.*/releases/tag/\([^/[:space:]]\+\)$#\1#p')"
   if [[ -z "${tag}" ]]; then
-    echo "Could not determine latest release tag" >&2
+    echo "Could not determine latest release tag from ${latest_url}" >&2
     return 1
   fi
   printf '%s\n' "${tag}"
