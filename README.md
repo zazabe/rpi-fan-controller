@@ -12,8 +12,38 @@ This project targets 4-wire PWM fans such as the Noctua NF-A4x10 5V PWM.
 - Drive the fan PWM input using open-drain/transistor style wiring from the selected GPIO pin.
 - Fan tach wiring is optional. RPM logging can use `hwmon` or a direct tach GPIO input.
 - Verify common ground between Raspberry Pi and fan power source.
-- For low CPU usage, enable hardware PWM in boot config (for example `dtoverlay=pwm-2chan`) and reboot.
-- If hardware PWM is unavailable, the app automatically falls back to software PWM and logs a warning at startup.
+
+### Hardware PWM Setup (Recommended)
+
+- Software PWM at 25 kHz can consume significant CPU on Raspberry Pi.
+- Hardware PWM keeps timing in hardware, so controller CPU usage stays much lower.
+
+Supported hardware PWM pins:
+
+- PWM0: BCM `12` or `18`
+- PWM1: BCM `13` or `19`
+
+Minimal boot configuration:
+
+1. Edit `/boot/firmware/config.txt`
+2. Add:
+
+```ini
+[all]
+dtoverlay=pwm-2chan
+```
+
+3. Reboot
+
+Verification tips:
+
+- Confirm PWM sysfs exists: `ls -l /sys/class/pwm/pwmchip0`
+- Watch startup logs: `journalctl -u rpi-fan-control -n 50 --no-pager`
+- Check runtime footprint: `systemd-cgtop`
+
+Fallback behavior:
+
+- If hardware PWM init fails (overlay missing, pin conflict, etc.), the app falls back to software PWM automatically.
 
 ## Configuration
 
