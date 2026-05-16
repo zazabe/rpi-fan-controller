@@ -24,16 +24,54 @@ case "$(uname -m)" in
 esac
 
 ASSET="rpi-fan-control-${TARGET}.tar.gz"
-if [[ "${VERSION}" == "latest" ]]; then
-  URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
-else
-  URL="https://github.com/${REPO}/releases/download/${VERSION}/${ASSET}"
-fi
+
+resolve_download_url() {
+  local version="$1"
+  local api_url
+
+  if [[ "${version}" == "latest" ]]; then
+    api_url="https://api.github.com/repos/${REPO}/releases/latest"
+  else
+    api_url="https://api.github.com/repos/${REPO}/releases/tags/${version}"
+  fi
+
+  local json
+  if ! json="$(curl -fsSL -H "Accept: application/vnd.github+json" "${api_url}")"; then
+    echo "Failed to query GitHub release metadata: ${api_url}" >&2
+    return 1
+  fi
+
+  # Prefer exact current asset name, but also accept historical names that end
+  # with "-${TARGET}.tar.gz" (for example with version in the filename).
+  local url
+  url="$(
+    printf '%s\n' "${json}" \
+      | sed -n 's/.*"browser_download_url":[[:space:]]*"\([^"]*\)".*/\1/p' \
+      | awk -v exact="${ASSET}" -v suffix="-${TARGET}.tar.gz" '
+          {
+            if ($0 ~ ("/" exact "$")) exact_match = $0
+            if ($0 ~ (suffix "$")) suffix_match = $0
+          }
+          END {
+            if (exact_match != "") print exact_match
+            else if (suffix_match != "") print suffix_match
+          }
+        '
+  )"
+
+  if [[ -z "${url}" ]]; then
+    echo "No release asset found for ${TARGET} in ${version}" >&2
+    return 1
+  fi
+
+  printf '%s\n' "${url}"
+}
 
 TMP_DIR="$(mktemp -d)"
 cleanup() { rm -rf "${TMP_DIR}"; }
 trap cleanup EXIT
 
+URL="$(resolve_download_url "${VERSION}")"
 echo "Downloading ${URL}"
 curl -fL "${URL}" -o "${TMP_DIR}/release.tar.gz"
 tar -xzf "${TMP_DIR}/release.tar.gz" -C "${TMP_DIR}"
