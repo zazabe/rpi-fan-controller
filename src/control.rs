@@ -41,16 +41,18 @@ pub fn process_tick(
     cfg: &AppConfig,
     state: &mut ControllerState,
 ) -> TickResult {
+    let was_initialized = state.initialized;
     let target = map_temp_to_target_duty(temp_millideg, cfg);
 
-    let smoothed = if state.initialized {
+    let smoothed = if was_initialized {
         smooth_asymmetric(target, state.current_duty, cfg)
     } else {
         state.initialized = true;
         target
     };
 
-    let should_write = abs_diff(smoothed, state.last_written_duty) >= cfg.write_deadband();
+    let should_write =
+        !was_initialized || abs_diff(smoothed, state.last_written_duty) >= cfg.write_deadband();
 
     state.current_duty = smoothed;
 
@@ -196,5 +198,18 @@ mod tests {
 
         let second = process_tick(65_500, &cfg, &mut state);
         assert!(!second.should_write);
+    }
+
+    #[test]
+    fn first_tick_writes_even_when_target_is_zero() {
+        let cfg = AppConfig::default();
+        let mut state = ControllerState::new();
+
+        // Keep CPU below off_temp so mapped target duty is exactly 0%.
+        let first = process_tick((cfg.target_temp_c - 15) * 1_000, &cfg, &mut state);
+
+        assert_eq!(first.target_duty, 0);
+        assert_eq!(first.smoothed_duty, 0);
+        assert!(first.should_write);
     }
 }
