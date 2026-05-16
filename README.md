@@ -91,6 +91,13 @@ journalctl -u rpi-fan-control -f
 - Recommended convention: semantic tags like `v0.1.0`.
 - Release notes template: `.github/release_template.md`.
 
+To bump a release, create and push a new semantic tag:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
 ## License
 
 This project is licensed under the MIT License. See `LICENSE`.
