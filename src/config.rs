@@ -12,6 +12,7 @@ pub struct AppConfig {
     pub gpio_pin: u8,
     pub thermal_path: String,
     pub fan_speed_path: Option<String>,
+    pub tach_gpio_pin: Option<u8>,
     pub loop_interval_ms: u64,
     pub status_interval_secs: u64,
     pub target_temp_c: i32,
@@ -57,6 +58,7 @@ impl Default for AppConfig {
             gpio_pin: 18,
             thermal_path: "/sys/class/thermal/thermal_zone0/temp".to_string(),
             fan_speed_path: None,
+            tach_gpio_pin: None,
             loop_interval_ms: 1_000,
             status_interval_secs: 60,
             target_temp_c: 62,
@@ -98,6 +100,11 @@ impl AppConfig {
         if let Some(path) = &self.fan_speed_path {
             if path.trim().is_empty() {
                 return Err("fan_speed_path must not be empty when provided".into());
+            }
+        }
+        if let Some(pin) = self.tach_gpio_pin {
+            if pin > 27 {
+                return Err("tach_gpio_pin must be a valid BCM pin (0..=27)".into());
             }
         }
         if !(35..=85).contains(&self.target_temp_c) {

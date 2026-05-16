@@ -2,7 +2,7 @@ use log::{debug, error, info, warn};
 use rpi_fan_control::config::AppConfig;
 use rpi_fan_control::control::{process_tick, should_update_target, ControllerState, TickResult};
 use rpi_fan_control::hardware::{
-    read_cpu_temp_millideg, read_fan_speed_rpm, DryRunPwmBackend, PwmBackend,
+    read_cpu_temp_millideg, read_fan_speed_rpm, DryRunPwmBackend, PwmBackend, TachRpmReader,
 };
 use std::thread;
 use std::time::{Duration, Instant};
@@ -12,11 +12,14 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let (cfg, cfg_path) = AppConfig::load()?;
     info!(
-        "rpi-fan-control start config_source={} pin={} thermal_path={} fan_speed_path={} loop_ms={} status_interval_s={} target_temp_c={} min_duty={} max_duty={} response={:?} dry_run={}",
+        "rpi-fan-control start config_source={} pin={} thermal_path={} fan_speed_path={} tach_gpio_pin={} loop_ms={} status_interval_s={} target_temp_c={} min_duty={} max_duty={} response={:?} dry_run={}",
         cfg_path.display(),
         cfg.gpio_pin,
         cfg.thermal_path,
         cfg.fan_speed_path.as_deref().unwrap_or("<disabled>"),
+        cfg.tach_gpio_pin
+            .map(|pin| pin.to_string())
+            .unwrap_or_else(|| "<disabled>".to_string()),
         cfg.loop_interval_ms,
         cfg.status_interval_secs,
         cfg.target_temp_c,
@@ -27,6 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     );
 
     let mut pwm = build_backend(&cfg)?;
+    let mut tach_reader = build_tach_reader(&cfg);
     let mut state = ControllerState::new();
     let mut tick: u64 = 0;
     let tick_sleep = Duration::from_millis(cfg.loop_interval_ms);
@@ -69,20 +73,22 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tick = tick.saturating_add(1);
         if start >= next_status_at {
             let temp_c = f64::from(temp_millideg) / 1_000.0;
-            let fan_speed = match cfg.fan_speed_path.as_deref() {
-                Some(path) => match read_fan_speed_rpm(path) {
-                    Ok(rpm) => format!("{rpm} RPM"),
-                    Err(err) => format!("unavailable ({err})"),
-                },
-                None => "disabled".to_string(),
-            };
-
-            info!(
-                "status: CPU {temp_c:.1} C, fan {fan_speed}, duty {}% (target {}%), pwm write {}",
-                result.smoothed_duty,
-                result.target_duty,
-                if result.should_write { "yes" } else { "no" },
-            );
+            let fan_rpm = read_fan_rpm(&cfg, tach_reader.as_mut());
+            if let Some(fan_rpm) = fan_rpm {
+                info!(
+                    "status: CPU {temp_c:.1} C, fan {fan_rpm} RPM, duty {}% (target {}%), pwm write {}",
+                    result.smoothed_duty,
+                    result.target_duty,
+                    if result.should_write { "yes" } else { "no" },
+                );
+            } else {
+                info!(
+                    "status: CPU {temp_c:.1} C, duty {}% (target {}%), pwm write {}",
+                    result.smoothed_duty,
+                    result.target_duty,
+                    if result.should_write { "yes" } else { "no" },
+                );
+            }
             while next_status_at <= start {
                 next_status_at += status_interval;
             }
@@ -121,4 +127,39 @@ fn build_backend(
         warn!("non-rpi architecture detected; forcing dry-run backend");
         Ok(Box::new(DryRunPwmBackend))
     }
+}
+
+fn build_tach_reader(cfg: &AppConfig) -> Option<TachRpmReader> {
+    let tach_pin = cfg.tach_gpio_pin?;
+    match TachRpmReader::new(tach_pin) {
+        Ok(reader) => {
+            info!("tach reader enabled on BCM pin {}", tach_pin);
+            Some(reader)
+        }
+        Err(err) => {
+            warn!(
+                "tach reader unavailable on pin {} ({}); RPM logging disabled unless hwmon works",
+                tach_pin, err
+            );
+            None
+        }
+    }
+}
+
+fn read_fan_rpm(cfg: &AppConfig, tach_reader: Option<&mut TachRpmReader>) -> Option<u32> {
+    if let Some(path) = cfg.fan_speed_path.as_deref() {
+        match read_fan_speed_rpm(path) {
+            Ok(rpm) => return Some(rpm),
+            Err(err) => warn!("hwmon fan speed read failed at {} ({})", path, err),
+        }
+    }
+
+    if let Some(reader) = tach_reader {
+        match reader.read_rpm() {
+            Ok(rpm) => return Some(rpm),
+            Err(err) => warn!("tach RPM read failed ({})", err),
+        }
+    }
+
+    None
 }

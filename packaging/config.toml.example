@@ -3,6 +3,9 @@ gpio_pin = 18
 thermal_path = "/sys/class/thermal/thermal_zone0/temp"
 # Optional tachometer sysfs path, e.g. /sys/class/hwmon/hwmon0/fan1_input
 # fan_speed_path = "/sys/class/hwmon/hwmon0/fan1_input"
+# Optional tach GPIO (BCM numbering). Uses internal pull-up for open-collector tach.
+# Used only when fan_speed_path is not readable.
+# tach_gpio_pin = 24
 loop_interval_ms = 1000
 status_interval_secs = 60
 target_temp_c = 62

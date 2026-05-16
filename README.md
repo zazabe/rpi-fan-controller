@@ -8,7 +8,7 @@ This project targets 4-wire PWM fans such as the Noctua NF-A4x10 5V PWM.
 
 - Power fan VCC/GND from a stable 5V source.
 - Drive the fan PWM input using open-drain/transistor style wiring from the selected GPIO pin.
-- Keep fan tach wiring optional for this version (controller only writes PWM).
+- Fan tach wiring is optional. RPM logging can use `hwmon` or a direct tach GPIO input.
 - Verify common ground between Raspberry Pi and fan power source.
 
 ## Configuration
@@ -25,7 +25,8 @@ Important keys:
 
 - `gpio_pin`: BCM pin number used for PWM output.
 - `thermal_path`: Linux sysfs temperature source path.
-- `fan_speed_path`: optional Linux sysfs tach path for RPM status logging.
+- `fan_speed_path`: optional Linux sysfs tach path for RPM status logging (first choice).
+- `tach_gpio_pin`: optional BCM GPIO input for tach RPM fallback (uses internal pull-up).
 - `loop_interval_ms`: control loop period (default `1000`).
 - `status_interval_secs`: interval for `info` status logs in `journalctl` (default `60`).
 - `target_temp_c`: desired cooling target used to derive the fan curve.
