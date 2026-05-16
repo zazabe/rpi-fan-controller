@@ -12,7 +12,8 @@ This project targets 4-wire PWM fans such as the Noctua NF-A4x10 5V PWM.
 - Drive the fan PWM input using open-drain/transistor style wiring from the selected GPIO pin.
 - Fan tach wiring is optional. RPM logging can use `hwmon` or a direct tach GPIO input.
 - Verify common ground between Raspberry Pi and fan power source.
-- For hardware PWM, enable PWM overlay in boot config (for example `dtoverlay=pwm-2chan`) and reboot.
+- For low CPU usage, enable hardware PWM in boot config (for example `dtoverlay=pwm-2chan`) and reboot.
+- If hardware PWM is unavailable, the app automatically falls back to software PWM and logs a warning at startup.
 
 ## Configuration
 
@@ -27,7 +28,7 @@ Reference example: `packaging/config.toml.example`.
 
 Important keys:
 
-- `gpio_pin`: BCM pin used for hardware PWM output (`12`/`18` for PWM0, `13`/`19` for PWM1).
+- `gpio_pin`: BCM pin used for PWM output. `12`/`18` (PWM0) and `13`/`19` (PWM1) use hardware PWM (preferred, low CPU). Other pins work via automatic software-PWM fallback (higher CPU, warning logged).
 - `thermal_path`: Linux sysfs temperature source path.
 - `fan_speed_path`: optional Linux sysfs tach path for RPM status logging (first choice).
 - `tach_gpio_pin`: optional BCM GPIO input for tach RPM fallback (uses internal pull-up).

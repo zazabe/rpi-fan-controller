@@ -1,4 +1,6 @@
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+use log::warn;
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 use rppal::pwm::{Channel, Polarity, Pwm};
 use std::fs;
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
@@ -28,24 +30,47 @@ impl PwmBackend for DryRunPwmBackend {
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 pub struct RpiGpioPwmBackend {
-    pwm: Pwm,
+    backend: RpiPwmBackendImpl,
+}
+
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+enum RpiPwmBackendImpl {
+    Hardware(Pwm),
+    Software(rppal::gpio::OutputPin),
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
 impl RpiGpioPwmBackend {
     pub fn new(gpio_pin: u8) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        // GPIO software PWM at 25 kHz can consume an entire CPU core.
-        // Use hardware PWM channels to keep service overhead low.
-        let channel = gpio_pin_to_pwm_channel(gpio_pin)?;
-        let pwm = Pwm::with_frequency(channel, 25_000.0, 0.0, Polarity::Normal, true).map_err(
-            |err| {
-                format!(
-                    "failed to init hardware PWM on BCM {} ({}) - ensure PWM is enabled in boot config (e.g. dtoverlay=pwm-2chan) and reboot",
-                    gpio_pin, err
-                )
-            },
-        )?;
-        Ok(Self { pwm })
+        const PWM_FREQUENCY_HZ: f64 = 25_000.0;
+
+        if let Some(channel) = gpio_pin_to_pwm_channel(gpio_pin) {
+            match Pwm::with_frequency(channel, PWM_FREQUENCY_HZ, 0.0, Polarity::Normal, true) {
+                Ok(pwm) => {
+                    return Ok(Self {
+                        backend: RpiPwmBackendImpl::Hardware(pwm),
+                    });
+                }
+                Err(err) => {
+                    warn!(
+                        "hardware PWM init failed on BCM {} ({}). Falling back to software PWM (higher CPU usage). To use hardware PWM, enable boot overlay (e.g. dtoverlay=pwm-2chan) and reboot.",
+                        gpio_pin, err
+                    );
+                }
+            }
+        } else {
+            warn!(
+                "BCM {} does not map to a hardware PWM channel (use BCM 12/18 for PWM0, BCM 13/19 for PWM1). Falling back to software PWM (higher CPU usage).",
+                gpio_pin
+            );
+        }
+
+        use rppal::gpio::Gpio;
+        let gpio = Gpio::new()?;
+        let pin = gpio.get(gpio_pin)?.into_output();
+        Ok(Self {
+            backend: RpiPwmBackendImpl::Software(pin),
+        })
     }
 }
 
@@ -55,23 +80,25 @@ impl PwmBackend for RpiGpioPwmBackend {
         &mut self,
         duty_percent: u8,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.pwm.set_duty_cycle(f64::from(duty_percent) / 100.0)?;
+        const PWM_FREQUENCY_HZ: f64 = 25_000.0;
+        match &mut self.backend {
+            RpiPwmBackendImpl::Hardware(pwm) => {
+                pwm.set_duty_cycle(f64::from(duty_percent) / 100.0)?;
+            }
+            RpiPwmBackendImpl::Software(pin) => {
+                pin.set_pwm_frequency(PWM_FREQUENCY_HZ, f64::from(duty_percent) / 100.0)?;
+            }
+        }
         Ok(())
     }
 }
 
 #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-fn gpio_pin_to_pwm_channel(
-    gpio_pin: u8,
-) -> Result<Channel, Box<dyn std::error::Error + Send + Sync>> {
+fn gpio_pin_to_pwm_channel(gpio_pin: u8) -> Option<Channel> {
     match gpio_pin {
-        12 | 18 => Ok(Channel::Pwm0),
-        13 | 19 => Ok(Channel::Pwm1),
-        _ => Err(format!(
-            "GPIO {} does not support hardware PWM (use BCM 12/18 for PWM0 or BCM 13/19 for PWM1)",
-            gpio_pin
-        )
-        .into()),
+        12 | 18 => Some(Channel::Pwm0),
+        13 | 19 => Some(Channel::Pwm1),
+        _ => None,
     }
 }
 
